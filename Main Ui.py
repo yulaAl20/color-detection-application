@@ -26,45 +26,56 @@ def open_image():
         # Call dominant color finding function
         dominant_colors()
 
-# Function for display dominant colors
+# Function for dominant colors
 def dominant_colors():
     global img_path
     
     img = cv2.imread(img_path)
-    
-    # Convert the image from BGR to RGB format
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img_reshaped = img_rgb.reshape((-1, 3))
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert to RGB
+    img_reshaped = img_rgb.reshape((-1, 3)) 
 
-    # Apply KMeans to find dominant colors
-    k = 5
-    kmeans = KMeans(n_clusters=k)
-    kmeans.fit(img_reshaped)
-    dominant_colors = kmeans.cluster_centers_.astype(int)
+    k = 5  
+    kmeans = KMeans(n_clusters=k)  # Initialize KMeans
+    kmeans.fit(img_reshaped)  # Fit KMeans
+    dominant_colors = kmeans.cluster_centers_.astype(int)  # Get dominant colors
 
-    # Create a square displaying the dominant colors
+    labels = kmeans.labels_  # Get cluster labels for each pixel
+    label_counts = np.bincount(labels)  # Count pixels in each cluster
+    total_count = len(labels)  # Tot pixels
+
+    #calculate percentage
+    percentages = [count / total_count * 100 for count in label_counts]
+
+    # dominant color display
     dominant_colors_img = np.zeros((100, 100 * k, 3), dtype=int)
     for i in range(k):
         dominant_colors_img[:, i * 100:(i + 1) * 100, :] = dominant_colors[i]
 
-    # Display the dominant colors using matplotlib and save it to a buffer
     fig, ax = plt.subplots(figsize=(10, 2))
     ax.imshow(dominant_colors_img, aspect='auto')
     ax.set_title('Dominant Colors')
     ax.axis('off')
 
     buf = BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0) 
+    fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
     buf.seek(0)
     plt.close(fig)
 
-    # Load the image from the buffer into PIL
-    dominant_colors_image = Image.open(buf)
+    dominant_colors_image = Image.open(buf) 
     tk_dominant_colors_image = ImageTk.PhotoImage(dominant_colors_image)
-    
-    # Display the image in Tkinter Label
+
     dominant_colors_label.config(image=tk_dominant_colors_image)
     dominant_colors_label.image = tk_dominant_colors_image
+
+    # Display color names and percentages
+    color_info = ""
+    for i in range(k):
+        color_name = get_color_name(*dominant_colors[i])  
+        percentage = percentages[i] 
+        color_info += f" {color_name}: {percentage:.2f}, "  # disply format( one line)
+    
+    color_info_label.config(text=color_info)
+
 
 # Function to get the closest color name from the CSV
 def get_color_name(R, G, B):
@@ -123,7 +134,7 @@ index = ["color", "color_name", "hex", "R", "G", "B"]
 csv = pd.read_csv('colors.csv', names=index, header=None)
 
 # Add canvas to display image
-canvas = Canvas(root, width=400, height=400, bg=bg_color, highlightthickness=0)
+canvas = Canvas(root, width=300, height=300, bg=bg_color, highlightthickness=0)
 canvas.pack()
 
 # Add button to open image
@@ -148,8 +159,16 @@ btn_colors = Button(root, text="Refresh Dominant Colors", command=dominant_color
 btn_colors.pack(side=TOP, pady=10)
 
 # Label to display dominant colors
-dominant_colors_label = Label(root, bg=bg_color, bd=0)
+dominant_colors_label = Label(root, bg=bg_color, bd=0 , width=800, height=30)
 dominant_colors_label.pack(pady=10)
+
+# heading for names and the display
+color_info_label = Label(root, text="Dominant color names and the percentages", font=('Arial', 13))
+color_info_label.pack(pady=10)
+
+# Label to display color names and percentages
+color_info_label = Label(root, text="", font=('Arial', 11), bg=bg_color, bd=0)
+color_info_label.pack(pady=10)
 
 # Bind mouse click event to the canvas
 canvas.bind("<Button-1>", on_click)
