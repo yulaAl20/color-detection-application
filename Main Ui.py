@@ -24,10 +24,10 @@ def open_image():
         canvas_img = canvas.create_image(0, 0, anchor=NW, image=tk_img)
         
         # Call dominant color finding function
-        dominant_colors()
+        dominant_colors(dominant_colors_label, color_info_frame)
 
 # Function for dominant colors
-def dominant_colors():
+def dominant_colors(label_widget, info_widget):
     global img_path
     
     img = cv2.imread(img_path)
@@ -41,19 +41,18 @@ def dominant_colors():
 
     labels = kmeans.labels_  # Get cluster labels for each pixel
     label_counts = np.bincount(labels)  # Count pixels in each cluster
-    total_count = len(labels)  # Tot pixels
+    total_count = len(labels)  # Total pixels
 
-    #calculate percentage
+    # Calculate percentage
     percentages = [count / total_count * 100 for count in label_counts]
 
-    # dominant color display
+    # Dominant color display
     dominant_colors_img = np.zeros((100, 100 * k, 3), dtype=int)
     for i in range(k):
         dominant_colors_img[:, i * 100:(i + 1) * 100, :] = dominant_colors[i]
 
     fig, ax = plt.subplots(figsize=(10, 2))
     ax.imshow(dominant_colors_img, aspect='auto')
-    ax.set_title('Dominant Colors')
     ax.axis('off')
 
     buf = BytesIO()
@@ -64,18 +63,26 @@ def dominant_colors():
     dominant_colors_image = Image.open(buf) 
     tk_dominant_colors_image = ImageTk.PhotoImage(dominant_colors_image)
 
-    dominant_colors_label.config(image=tk_dominant_colors_image)
-    dominant_colors_label.image = tk_dominant_colors_image
+    label_widget.config(image=tk_dominant_colors_image)
+    label_widget.image = tk_dominant_colors_image
 
-    # Display color names and percentages
-    color_info = ""
+    # Clear previous color names and percentages
+    for widget in info_widget.winfo_children():
+        widget.destroy()
+
+    # Display color names and percentages below each color
     for i in range(k):
         color_name = get_color_name(*dominant_colors[i])  
-        percentage = percentages[i] 
-        color_info += f" {color_name}: {percentage:.2f}, "  # disply format( one line)
-    
-    color_info_label.config(text=color_info)
-
+        percentage = percentages[i]
+        hex_value = f'#{dominant_colors[i][0]:02x}{dominant_colors[i][1]:02x}{dominant_colors[i][2]:02x}'.upper()
+        color_info = f"{color_name}: {percentage:.2f}%"
+        hex_info = f"{hex_value}"
+        
+        color_label = Label(info_widget, text=color_info, font=('Arial', 11), bg=bg_color, fg=text_color, bd=0)
+        color_label.grid(row=1, column=i, padx=10, pady=5)  # Display below the color
+        
+        hex_label = Label(info_widget, text=hex_info, font=('Arial', 11), bg=bg_color, fg=text_color, bd=0)
+        hex_label.grid(row=2, column=i, padx=10, pady=5)  # Display below the name and percentage
 
 # Function to get the closest color name from the CSV
 def get_color_name(R, G, B):
@@ -113,62 +120,78 @@ def update_color_info():
     hex_value = f'#{r:02x}{g:02x}{b:02x}'.upper()
     rgb_value = f'RGB: ({r}, {g}, {b})'
 
-    color_name_label.config(text=color_name)
-    hex_label.config(text=hex_value)
-    rgb_label.config(text=rgb_value)
+    color_name_label.config(text=f"Color Name: {color_name}")
+    hex_label.config(text=f"Hex Value: {hex_value}")
+    rgb_label.config(text=f"RGB Value: {rgb_value}")
     color_display.config(bg=hex_value)
 
 # Initialize tkinter window
 root = Tk()
 
 root.title("Color Detection App")
-root.iconbitmap('Color Vista.ico') 
 root.geometry("1000x750")
 
-# background color
-bg_color = '#FAF9F6'
+# Set dark background color
+bg_color = '#2E2E2E'
+text_color = '#E0E0E0'
+button_color = '#4CAF50'
+button_text_color = 'white'
+highlight_color = '#2196F3'
+
 root.configure(bg=bg_color)
 
 # Load CSV file
 index = ["color", "color_name", "hex", "R", "G", "B"]
 csv = pd.read_csv('colors.csv', names=index, header=None)
 
+# Main frame
+main_frame = Frame(root, bg=bg_color)
+main_frame.pack(pady=20)
+
 # Add canvas to display image
-canvas = Canvas(root, width=300, height=300, bg=bg_color, highlightthickness=0)
+canvas_frame = Frame(main_frame, bg=bg_color)
+canvas_frame.grid(row=0, column=0, padx=20, pady=10)
+canvas = Canvas(canvas_frame, width=500, height=400, bg='#3C3C3C', highlightthickness=0)
 canvas.pack()
 
+# Controls frame
+controls_frame = Frame(main_frame, bg=bg_color)
+controls_frame.grid(row=0, column=1, padx=20, pady=10)
+
 # Add button to open image
-btn_open = Button(root, text="Open Image", command=open_image)
-btn_open.pack(side=TOP, pady=10)
+btn_open = Button(controls_frame, text="Open Image", command=open_image, font=('Arial', 14), bg=button_color, fg=button_text_color)
+btn_open.pack(pady=10)
 
 # Labels to display color information
-color_name_label = Label(root, text="Color Name:", font=('Arial', 14),bg=bg_color, bd=0)
-color_name_label.pack()
+color_name_label = Label(controls_frame, text="Color Name:", font=('Arial', 14), bg=bg_color, fg=text_color, bd=0)
+color_name_label.pack(pady=5)
 
-hex_label = Label(root, text="Hex Value:", font=('Arial', 14), bg=bg_color, bd=0)
-hex_label.pack()
+hex_label = Label(controls_frame, text="Hex Value:", font=('Arial', 14), bg=bg_color, fg=text_color, bd=0)
+hex_label.pack(pady=5)
 
-rgb_label = Label(root, text="RGB Value:", font=('Arial', 14), bg=bg_color, bd=0)
-rgb_label.pack()
+rgb_label = Label(controls_frame, text="RGB Value:", font=('Arial', 14), bg=bg_color, fg=text_color, bd=0)
+rgb_label.pack(pady=5)
 
-color_display = Label(root, width=20, height=2, font=('Arial', 14), bg=bg_color, bd=0)
+color_display = Label(controls_frame, width=20, height=2, font=('Arial', 14), bg=bg_color, bd=0)
 color_display.pack(pady=10)
 
-# Add button to display dominant colors
-btn_colors = Button(root, text="Refresh Dominant Colors", command=dominant_colors)
-btn_colors.pack(side=TOP, pady=10)
+# Add button to generate a new color palette
+btn_generate_palette = Button(controls_frame, text="Generate New Color Palette", command=lambda: dominant_colors(dominant_colors_label2, color_info_frame2), font=('Arial', 14), bg=highlight_color, fg=button_text_color)
+btn_generate_palette.pack(pady=10)
 
 # Label to display dominant colors
-dominant_colors_label = Label(root, bg=bg_color, bd=0 , width=800, height=30)
+dominant_colors_label = Label(controls_frame, bg=bg_color, bd=0)
 dominant_colors_label.pack(pady=10)
 
-# heading for names and the display
-color_info_label = Label(root, text="Dominant color names and the percentages", font=('Arial', 13))
-color_info_label.pack(pady=10)
+dominant_colors_label2 = Label(controls_frame, bg=bg_color, bd=0)
+dominant_colors_label2.pack(pady=10)
 
-# Label to display color names and percentages
-color_info_label = Label(root, text="", font=('Arial', 11), bg=bg_color, bd=0)
-color_info_label.pack(pady=10)
+# Frame to display color names and percentages
+color_info_frame = Frame(controls_frame, bg=bg_color)
+color_info_frame.pack(pady=10)
+
+color_info_frame2 = Frame(controls_frame, bg=bg_color)
+color_info_frame2.pack(pady=10)
 
 # Bind mouse click event to the canvas
 canvas.bind("<Button-1>", on_click)
