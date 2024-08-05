@@ -7,6 +7,9 @@ from PIL import Image, ImageTk
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas as pdf_canvas
+from reportlab.lib.utils import ImageReader
 
 # Function to open and display an image
 def open_image():
@@ -51,7 +54,7 @@ def dominant_colors(label_widget, info_widget):
     for i in range(k):
         dominant_colors_img[:, i * 100:(i + 1) * 100, :] = dominant_colors[i]
 
-    fig, ax = plt.subplots(figsize=(10, 2))
+    fig, ax = plt.subplots(figsize=(5, 1))
     ax.imshow(dominant_colors_img, aspect='auto')
     ax.axis('off')
 
@@ -125,16 +128,29 @@ def update_color_info():
     rgb_label.config(text=f"RGB Value: {rgb_value}")
     color_display.config(bg=hex_value)
 
+# Function to print summary report
+def print_summary():
+    global img_path, dominant_colors, percentages, color_names, buf
+
+    pdf_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
+    if not pdf_path:
+        return
+
+    #there's error so removed the code. want further develop.
+
+
 # Initialize tkinter window
 root = Tk()
 
 root.title("Color Detection App")
+root.iconbitmap('Color Vista.ico')
 root.geometry("1000x750")
 
 # Set dark background color
 bg_color = '#2E2E2E'
 text_color = '#E0E0E0'
 button_color = '#4CAF50'
+print_button_color = '#ff4b2f'
 button_text_color = 'white'
 highlight_color = '#2196F3'
 
@@ -175,23 +191,29 @@ rgb_label.pack(pady=5)
 color_display = Label(controls_frame, width=20, height=2, font=('Arial', 14), bg=bg_color, bd=0)
 color_display.pack(pady=10)
 
-# Add button to generate a new color palette
-btn_generate_palette = Button(controls_frame, text="Generate New Color Palette", command=lambda: dominant_colors(dominant_colors_label2, color_info_frame2), font=('Arial', 14), bg=highlight_color, fg=button_text_color)
-btn_generate_palette.pack(pady=10)
-
 # Label to display dominant colors
 dominant_colors_label = Label(controls_frame, bg=bg_color, bd=0)
 dominant_colors_label.pack(pady=10)
-
-dominant_colors_label2 = Label(controls_frame, bg=bg_color, bd=0)
-dominant_colors_label2.pack(pady=10)
 
 # Frame to display color names and percentages
 color_info_frame = Frame(controls_frame, bg=bg_color)
 color_info_frame.pack(pady=10)
 
+# Add button to generate a new color palette
+btn_generate_palette = Button(controls_frame, text="Generate New Color Palette", command=lambda: dominant_colors(dominant_colors_label2, color_info_frame2), font=('Arial', 14), bg=highlight_color, fg=button_text_color)
+btn_generate_palette.pack(pady=10)
+
+# Label to display another dominant colors
+dominant_colors_label2 = Label(controls_frame, bg=bg_color, bd=0)
+dominant_colors_label2.pack(pady=10)
+
+# Frame to display color names and percentages
 color_info_frame2 = Frame(controls_frame, bg=bg_color)
 color_info_frame2.pack(pady=10)
+
+# Add button to print summary report
+btn_print = Button(canvas_frame, text="Print Summary Report", command=print_summary, font=('Arial', 14), bg=print_button_color, fg=button_text_color)
+btn_print.pack(pady=10)
 
 # Bind mouse click event to the canvas
 canvas.bind("<Button-1>", on_click)
