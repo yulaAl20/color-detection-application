@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from tkinter import *
 from tkinter import filedialog
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageEnhance
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from io import BytesIO
@@ -13,12 +13,13 @@ from reportlab.lib.utils import ImageReader
 
 # Function to open and display an image
 def open_image():
-    global img_path, img, tk_img, img_resized, img_pil, canvas_img
+    global img_path, img, tk_img, img_resized, img_pil, canvas_img, original_img_pil
     img_path = filedialog.askopenfilename()
     if img_path:
         img = cv2.imread(img_path)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_pil = Image.fromarray(img_rgb)
+        original_img_pil = img_pil.copy()  # Save the original image
 
         # Resize image to fit within the canvas while maintaining aspect ratio
         img_pil.thumbnail((canvas.winfo_width(), canvas.winfo_height()))
@@ -29,12 +30,40 @@ def open_image():
         # Call dominant color finding function
         dominant_colors(dominant_colors_label, color_info_frame)
 
+# Function to take and display a picture from the webcam
+def take_picture():
+    global img_path, img, tk_img, img_resized, img_pil, canvas_img, original_img_pil
+
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Could not open webcam")
+        return
+    
+    ret, frame = cap.read()
+    cap.release()
+
+    if ret:
+        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_rgb)
+        original_img_pil = img_pil.copy()  # Save the original image
+        
+        # Resize image to fit within the canvas while maintaining aspect ratio
+        img_pil.thumbnail((canvas.winfo_width(), canvas.winfo_height()))
+        img_resized = img_pil
+        tk_img = ImageTk.PhotoImage(img_resized)
+        canvas_img = canvas.create_image(0, 0, anchor=NW, image=tk_img)
+        
+        # Call dominant color finding function
+        dominant_colors(dominant_colors_label, color_info_frame)
+    else:
+        print("Failed to capture image")
+
 # Function for dominant colors
 def dominant_colors(label_widget, info_widget):
-    global img_path
+    global img_path, percentages, color_names
     
-    img = cv2.imread(img_path)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert to RGB
+    img = np.array(img_pil)
+    img_rgb = img[:, :, :3]  # Convert to RGB
     img_reshaped = img_rgb.reshape((-1, 3)) 
 
     k = 5  
@@ -73,6 +102,8 @@ def dominant_colors(label_widget, info_widget):
     for widget in info_widget.winfo_children():
         widget.destroy()
 
+    color_names = []
+
     # Display color names and percentages below each color
     for i in range(k):
         color_name = get_color_name(*dominant_colors[i])  
@@ -83,9 +114,10 @@ def dominant_colors(label_widget, info_widget):
         
         color_label = Label(info_widget, text=color_info, font=('Arial', 11), bg=bg_color, fg=text_color, bd=0)
         color_label.grid(row=1, column=i, padx=10, pady=5)  # Display below the color
-        
         hex_label = Label(info_widget, text=hex_info, font=('Arial', 11), bg=bg_color, fg=text_color, bd=0)
         hex_label.grid(row=2, column=i, padx=10, pady=5)  # Display below the name and percentage
+        
+        color_names.append(color_name)
 
 # Function to get the closest color name from the CSV
 def get_color_name(R, G, B):
@@ -100,20 +132,17 @@ def get_color_name(R, G, B):
 
 # Function to handle click events on the image
 def on_click(event):
-    global b, g, r, x_pos, y_pos, img_resized, img
+    global b, g, r, x_pos, y_pos, img_resized, img_pil
     x_pos = event.x
     y_pos = event.y
 
     # Adjust coordinates according to the resized image
-    width_ratio = img.shape[1] / img_resized.width
-    height_ratio = img.shape[0] / img_resized.height
+    width_ratio = img_pil.size[0] / img_resized.width
+    height_ratio = img_pil.size[1] / img_resized.height
     x_adjusted = int(x_pos * width_ratio)
     y_adjusted = int(y_pos * height_ratio)
     
-    b, g, r = img[y_adjusted, x_adjusted]
-    b = int(b)
-    g = int(g)
-    r = int(r)
+    r, g, b = img_pil.getpixel((x_adjusted, y_adjusted))
     update_color_info()
 
 # Function to update and display color information
@@ -136,8 +165,56 @@ def print_summary():
     if not pdf_path:
         return
 
-    #there's error so removed the code. want further develop.
+    c = pdf_canvas.Canvas(pdf_path, pagesize=letter)
+    width, height = letter
 
+    c.drawString(100, height - 100, "Color Detection Summary Report")
+
+    # Insert image
+    img = ImageReader(img_path)
+    c.drawImage(img, 100, height - 500, width=400, height=400, preserveAspectRatio=True)
+
+    # Insert dominant colors
+    c.drawString(100, height - 550, "Dominant Colors:")
+    for i, (color_name, percentage) in enumerate(zip(color_names, percentages)):
+        c.drawString(100, height - 570 - i*20, f"{color_name}: {percentage:.2f}%")
+
+    c.save()
+
+# Function to apply filter to the image
+def apply_filter(filter_type):
+    global img_pil, img_resized, tk_img, canvas_img
+
+    img_filtered = img_pil.copy()
+
+    if filter_type == "Grayscale":
+        img_filtered = img_filtered.convert("L").convert("RGB")
+    elif filter_type == "Sepia":
+        sepia_filter = ImageEnhance.Color(img_filtered)
+        img_filtered = sepia_filter.enhance(0.3)
+    elif filter_type == "Negative":
+        img_filtered = Image.eval(img_filtered, lambda p: 255 - p)
+    elif filter_type == "Brighten":
+        enhancer = ImageEnhance.Brightness(img_filtered)
+        img_filtered = enhancer.enhance(1.5)
+    elif filter_type == "Contrast":
+        enhancer = ImageEnhance.Contrast(img_filtered)
+        img_filtered = enhancer.enhance(1.5)
+
+    img_resized = img_filtered.copy()
+    img_resized.thumbnail((canvas.winfo_width(), canvas.winfo_height()))
+    tk_img = ImageTk.PhotoImage(img_resized)
+    canvas.itemconfig(canvas_img, image=tk_img)
+
+# Function to remove filter
+def remove_filter():
+    global img_pil, img_resized, tk_img, canvas_img, original_img_pil
+
+    img_pil = original_img_pil.copy()
+    img_resized = img_pil.copy()
+    img_resized.thumbnail((canvas.winfo_width(), canvas.winfo_height()))
+    tk_img = ImageTk.PhotoImage(img_resized)
+    canvas.itemconfig(canvas_img, image=tk_img)
 
 # Initialize tkinter window
 root = Tk()
@@ -178,6 +255,10 @@ controls_frame.grid(row=0, column=1, padx=20, pady=10)
 btn_open = Button(controls_frame, text="Open Image", command=open_image, font=('Arial', 14), bg=button_color, fg=button_text_color)
 btn_open.pack(pady=10)
 
+# Add button to take picture
+btn_take_picture = Button(controls_frame, text="Take Picture", command=take_picture, font=('Arial', 14), bg=button_color, fg=button_text_color)
+btn_take_picture.pack(pady=10)
+
 # Labels to display color information
 color_name_label = Label(controls_frame, text="Color Name:", font=('Arial', 14), bg=bg_color, fg=text_color, bd=0)
 color_name_label.pack(pady=5)
@@ -210,6 +291,19 @@ dominant_colors_label2.pack(pady=10)
 # Frame to display color names and percentages
 color_info_frame2 = Frame(controls_frame, bg=bg_color)
 color_info_frame2.pack(pady=10)
+
+# Add filter dropdown menu
+filter_var = StringVar()
+filter_var.set("Select Filter")
+
+filter_options = ["Grayscale", "Sepia", "Negative", "Brighten", "Contrast"]
+filter_menu = OptionMenu(controls_frame, filter_var, *filter_options, command=apply_filter)
+filter_menu.config(font=('Arial', 14), bg=highlight_color, fg=button_text_color)
+filter_menu.pack(pady=10)
+
+# Add button to remove filter
+btn_remove_filter = Button(controls_frame, text="Remove Filter", command=remove_filter, font=('Arial', 14), bg=print_button_color, fg=button_text_color)
+btn_remove_filter.pack(pady=10)
 
 # Add button to print summary report
 btn_print = Button(canvas_frame, text="Print Summary Report", command=print_summary, font=('Arial', 14), bg=print_button_color, fg=button_text_color)
