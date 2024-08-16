@@ -162,13 +162,13 @@ def update_color_info():
 #Start Pdf Writing
 # Create a PDF class extending FPDF to include the header
 class PDF(FPDF):
-    def header(self):
+     def header(self):
         # Logo
-        self.image('Color Vista.png', 20, 5, 40)
+        self.image('ImageInsight.png', 20, 5, 40)
         # Font
         self.set_font('helvetica', 'B', 30)
         # Title
-        self.cell(0, 25, 'Color Vista', ln=1, align='C')
+        self.cell(0, 25, 'ImageInsight', ln=1, align='C')
         # Line break
         self.ln(20)
         
@@ -338,8 +338,8 @@ def update_tab2():
 # Initialize tkinter window
 root = Tk()
 
-root.title("Color Detection App")
-root.iconbitmap('Color Vista.ico')
+root.title("ImageInsight")
+root.iconbitmap('ImageInsight.ico')
 root.geometry("1000x750")
 
 # Set dark background color
