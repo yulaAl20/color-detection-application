@@ -1,15 +1,17 @@
 import cv2
 import pandas as pd
 import numpy as np
+import os
 from tkinter import *
 from tkinter import filedialog
+from tkinter import Frame
 from PIL import Image, ImageTk, ImageEnhance
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from io import BytesIO
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas as pdf_canvas
-from reportlab.lib.utils import ImageReader
+from fpdf import FPDF
+from tkinter import ttk
+
 
 # Function to open and display an image
 def open_image():
@@ -157,6 +159,44 @@ def update_color_info():
     rgb_label.config(text=f"RGB Value: {rgb_value}")
     color_display.config(bg=hex_value)
 
+#Start Pdf Writing
+# Create a PDF class extending FPDF to include the header
+class PDF(FPDF):
+     def header(self):
+        # Logo
+        self.image('ImageInsight.png', 20, 5, 40)
+        # Font
+        self.set_font('helvetica', 'B', 30)
+        # Title
+        self.cell(0, 25, 'ImageInsight', ln=1, align='C')
+        # Line break
+        self.ln(20)
+        
+        # Draw a line
+        self.line(10, 50, 200, 50) 
+
+# Create an instance of the PDF class
+pdf = PDF('P', 'mm', 'Letter')
+
+# Add a page
+pdf.add_page()
+
+# Add auto break pages
+pdf.set_auto_page_break(auto=True, margin=15)
+
+# Set font
+pdf.set_font('helvetica', 'B', 14)
+
+# Add text
+pdf.cell(0, 20, 'Uploaded image', ln=True,align='C')
+
+#add image
+def add_image(self, img_path, x, y, w, h):
+        if os.path.exists(img_path):
+            self.image(img_path, x, y, w, h)
+        else:
+            print(f"Image at {img_path} not found")
+
 # Function to print summary report
 def print_summary():
     global img_path, dominant_colors, percentages, color_names, buf
@@ -165,21 +205,18 @@ def print_summary():
     if not pdf_path:
         return
 
-    c = pdf_canvas.Canvas(pdf_path, pagesize=letter)
-    width, height = letter
+    if os.path.exists(img_path):
+        pdf.image(img_path, x=58, y=75, w=100)
+        pdf.ln(110)
 
-    c.drawString(100, height - 100, "Color Detection Summary Report")
+    pdf.cell(200, 10, txt="Dominant Colors:", ln=True, align='C')
+    for color_name, percentage in zip(color_names, percentages):
+        pdf.cell(200, 10, txt=f"{color_name}: {percentage:.2f}%", ln=True, align='C')
 
-    # Insert image
-    img = ImageReader(img_path)
-    c.drawImage(img, 100, height - 500, width=400, height=400, preserveAspectRatio=True)
+    pdf.output(pdf_path)
+    print("PDF created successfully!")
 
-    # Insert dominant colors
-    c.drawString(100, height - 550, "Dominant Colors:")
-    for i, (color_name, percentage) in enumerate(zip(color_names, percentages)):
-        c.drawString(100, height - 570 - i*20, f"{color_name}: {percentage:.2f}%")
-
-    c.save()
+#End pdf writing
 
 # Function to apply filter to the image
 def apply_filter(filter_type):
@@ -216,11 +253,93 @@ def remove_filter():
     tk_img = ImageTk.PhotoImage(img_resized)
     canvas.itemconfig(canvas_img, image=tk_img)
 
+#tab2 filter 
+# Apply filters to an image
+def apply_filter_image(filter_type):
+    global img_pil
+    if filter_type == "Grayscale":
+        return img_pil.convert("L")
+    elif filter_type == "Sepia":
+        img_array = np.array(img_pil)
+        sepia_filter = np.array([[0.393, 0.769, 0.189],
+                                 [0.349, 0.686, 0.168],
+                                 [0.272, 0.534, 0.131]])
+        sepia_image = cv2.transform(img_array, sepia_filter)
+        sepia_image = np.clip(sepia_image, 0, 255)
+        return Image.fromarray(sepia_image.astype('uint8'))
+    elif filter_type == "Negative":
+        img_array = np.array(img_pil)
+        negative_image = 255 - img_array
+        return Image.fromarray(negative_image)
+    elif filter_type == "Brighten":
+        img_array = np.array(img_pil)
+        brighten_image = cv2.convertScaleAbs(img_array, alpha=1.2, beta=30)
+        return Image.fromarray(brighten_image)
+    elif filter_type == "Contrast":
+        img_array = np.array(img_pil)
+        contrast_image = cv2.convertScaleAbs(img_array, alpha=1.5, beta=0)
+        return Image.fromarray(contrast_image)
+    else:
+        return img_pil
+
+# Function to display the histogram
+def display_histogram(original_image, filtered_image):
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Plot histogram for original image
+    original_array = np.array(original_image)
+    original_hist = cv2.calcHist([original_array], [0], None, [256], [0, 256])
+    ax[0].plot(original_hist, color='gray')
+    ax[0].set_title('Original Image Histogram')
+
+    # Plot histogram for filtered image
+    filtered_array = np.array(filtered_image)
+    filtered_hist = cv2.calcHist([filtered_array], [0], None, [256], [0, 256])
+    ax[1].plot(filtered_hist, color='blue')
+    ax[1].set_title('Filtered Image Histogram')
+
+    # Save the histogram to a BytesIO object
+    hist_io = BytesIO()
+    plt.savefig(hist_io, format='png')
+    hist_io.seek(0)
+    hist_image = Image.open(hist_io)
+    
+    plt.close(fig)  # Close the figure to avoid displaying it in a separate window
+    return hist_image
+
+# Function to update the tab2 content
+def update_tab2():
+    global img_pil, tk_img_filtered, filtered_canvas_img, hist_canvas_img
+
+    # Update original image display
+    img_pil_resized = img_pil.copy()
+    img_pil_resized.thumbnail((250, 250))
+    tk_img_original = ImageTk.PhotoImage(img_pil_resized)
+    original_image_canvas.itemconfig(original_canvas_img, image=tk_img_original)
+    original_image_canvas.image = tk_img_original
+
+    # Apply the selected filter and update the filtered image display
+    filter_type = filter_var.get()
+    img_filtered = apply_filter_image(filter_type)
+    img_filtered_resized = img_filtered.copy()
+    img_filtered_resized.thumbnail((250, 250))
+    tk_img_filtered = ImageTk.PhotoImage(img_filtered_resized)
+    filtered_image_canvas.itemconfig(filtered_canvas_img, image=tk_img_filtered)
+    filtered_image_canvas.image = tk_img_filtered
+
+    # Generate and display the histogram
+    hist_image = display_histogram(img_pil, img_filtered)
+    hist_image.thumbnail((600, 600)) 
+    tk_hist_image = ImageTk.PhotoImage(hist_image)
+    histogram_canvas.itemconfig(hist_canvas_img, image=tk_hist_image)
+    histogram_canvas.image = tk_hist_image
+
+
 # Initialize tkinter window
 root = Tk()
 
-root.title("Color Detection App")
-root.iconbitmap('Color Vista.ico')
+root.title("ImageInsight")
+root.iconbitmap('ImageInsight.ico')
 root.geometry("1000x750")
 
 # Set dark background color
@@ -231,14 +350,27 @@ print_button_color = '#ff4b2f'
 button_text_color = 'white'
 highlight_color = '#2196F3'
 
+# Create a notebook (tabs container)
+notebook = ttk.Notebook(root)
+notebook.pack(pady=5, expand=True)
+
+# Create two frames to be used as tabs
+tab1 = ttk.Frame(notebook)
+tab2 = ttk.Frame(notebook)
+
+# Add the frames as tabs
+notebook.add(tab1, text="Main")
+notebook.add(tab2, text="Filter")
+
 root.configure(bg=bg_color)
+# Main Tab content (tab1)
 
 # Load CSV file
 index = ["color", "color_name", "hex", "R", "G", "B"]
 csv = pd.read_csv('colors.csv', names=index, header=None)
 
 # Main frame
-main_frame = Frame(root, bg=bg_color)
+main_frame = Frame(tab1, bg=bg_color)
 main_frame.pack(pady=20)
 
 # Add canvas to display image
@@ -247,17 +379,42 @@ canvas_frame.grid(row=0, column=0, padx=20, pady=10)
 canvas = Canvas(canvas_frame, width=500, height=400, bg='#3C3C3C', highlightthickness=0)
 canvas.pack()
 
-# Controls frame
-controls_frame = Frame(main_frame, bg=bg_color)
-controls_frame.grid(row=0, column=1, padx=20, pady=10)
+# Create a frame to hold the buttons
+button_frame = Frame(canvas_frame,bg='#3C3C3C')
+button_frame.pack(pady=10)
 
 # Add button to open image
-btn_open = Button(controls_frame, text="Open Image", command=open_image, font=('Arial', 14), bg=button_color, fg=button_text_color)
-btn_open.pack(pady=10)
+btn_open = Button(button_frame, text="Open Image", command=open_image, font=('Arial', 14), bg=button_color, fg=button_text_color)
+btn_open.pack(side=LEFT, padx=5)
 
 # Add button to take picture
-btn_take_picture = Button(controls_frame, text="Take Picture", command=take_picture, font=('Arial', 14), bg=button_color, fg=button_text_color)
-btn_take_picture.pack(pady=10)
+btn_take_picture = Button(button_frame, text="Take Picture", command=take_picture, font=('Arial', 14), bg=button_color, fg=button_text_color)
+btn_take_picture.pack(side=LEFT, padx=5)
+
+# Create a frame to hold the filter menu and remove filter button
+filter_frame = Frame(canvas_frame,bg='#3C3C3C')
+filter_frame.pack(pady=10)
+
+# Add filter dropdown menu
+filter_var = StringVar()
+filter_var.set("Select Filter")
+
+filter_options = ["Grayscale", "Sepia", "Negative", "Brighten", "Contrast"]
+filter_menu = OptionMenu(filter_frame, filter_var, *filter_options, command=apply_filter)
+filter_menu.config(font=('Arial', 14), bg=highlight_color, fg=button_text_color)
+filter_menu.pack(side=LEFT, padx=5)
+
+# Add button to remove filter
+btn_remove_filter = Button(filter_frame, text="Remove Filter", command=remove_filter, font=('Arial', 14), bg=print_button_color, fg=button_text_color)
+btn_remove_filter.pack(side=LEFT, padx=5)
+
+# Add button to print summary report
+btn_print = Button(canvas_frame, text="Print Summary Report", command=print_summary, font=('Arial', 14), bg=print_button_color, fg=button_text_color)
+btn_print.pack(pady=10)
+
+# Controls frame
+controls_frame = Frame(main_frame, bg=bg_color)
+controls_frame.grid(row=0, column=1, padx=20, pady=10,sticky='nsew')
 
 # Labels to display color information
 color_name_label = Label(controls_frame, text="Color Name:", font=('Arial', 14), bg=bg_color, fg=text_color, bd=0)
@@ -292,24 +449,49 @@ dominant_colors_label2.pack(pady=10)
 color_info_frame2 = Frame(controls_frame, bg=bg_color)
 color_info_frame2.pack(pady=10)
 
-# Add filter dropdown menu
+# Bind mouse click event to the canvas
+canvas.bind("<Button-1>", on_click)
+
+# Tab 2 content
+
+# Main frame
+main_frame_tab2 = Frame(tab2, bg=bg_color)
+main_frame_tab2.pack(pady=10)
+
+# Frame for original and filtered images
+image_frame = Frame(tab2, bg=bg_color)
+image_frame.pack(pady=20)
+
+# Configure style to set the background color for ttk frames
+style = ttk.Style()
+style.configure('TFrame', background=bg_color)
+
+# Canvas for displaying original image
+original_image_canvas = Canvas(image_frame, width=250, height=250, bg='#505050', highlightthickness=0)
+original_image_canvas.pack(side=LEFT, padx=10)
+original_canvas_img = original_image_canvas.create_image(0, 0, anchor=NW)
+
+# Canvas for displaying filtered image
+filtered_image_canvas = Canvas(image_frame, width=250, height=250, bg='#505050', highlightthickness=0)
+filtered_image_canvas.pack(side=LEFT, padx=10)
+filtered_canvas_img = filtered_image_canvas.create_image(0, 0, anchor=NW)
+
+# Dropdown menu for filters
 filter_var = StringVar()
 filter_var.set("Select Filter")
 
 filter_options = ["Grayscale", "Sepia", "Negative", "Brighten", "Contrast"]
-filter_menu = OptionMenu(controls_frame, filter_var, *filter_options, command=apply_filter)
-filter_menu.config(font=('Arial', 14), bg=highlight_color, fg=button_text_color)
+filter_menu = OptionMenu(tab2, filter_var, *filter_options)
+filter_menu.config(font=('Arial', 14), bg=highlight_color, fg=text_color)
 filter_menu.pack(pady=10)
 
-# Add button to remove filter
-btn_remove_filter = Button(controls_frame, text="Remove Filter", command=remove_filter, font=('Arial', 14), bg=print_button_color, fg=button_text_color)
-btn_remove_filter.pack(pady=10)
+# Button to apply filter and update tab2
+btn_apply_filter = Button(tab2, text="Apply Filter", command=update_tab2, font=('Arial', 14), bg=button_color, fg=text_color)
+btn_apply_filter.pack(pady=10)
 
-# Add button to print summary report
-btn_print = Button(canvas_frame, text="Print Summary Report", command=print_summary, font=('Arial', 14), bg=print_button_color, fg=button_text_color)
-btn_print.pack(pady=10)
-
-# Bind mouse click event to the canvas
-canvas.bind("<Button-1>", on_click)
+# Canvas for displaying histogram
+histogram_canvas = Canvas(tab2, width=600, height=600, bg=bg_color, highlightthickness=0)
+histogram_canvas.pack(pady=10)
+hist_canvas_img = histogram_canvas.create_image(0, 0, anchor=NW)
 
 root.mainloop()
